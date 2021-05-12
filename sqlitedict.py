@@ -172,6 +172,7 @@ class SqliteDict(DictClass):
         self.encode = encode
         self.decode = decode
         self.timeout = timeout
+        self.columns = set()
 
         logger.info("opening Sqlite table %r in %r" % (tablename, filename))
         self.conn = self._new_conn()
@@ -227,14 +228,32 @@ class SqliteDict(DictClass):
             yield key[0]
 
     def itervalues(self):
-        GET_VALUES = 'SELECT value FROM "%s" ORDER BY rowid' % self.tablename
-        for value in self.conn.select(GET_VALUES):
-            yield self.decode(value[0])
+        query_columns = list(self.columns)
+        columns_str = ", ".join(["value"] + query_columns)
+        GET_VALUES = f"SELECT {columns_str} FROM \"{self.tablename}\" ORDER BY rowid"
+
+
+        for row in self.conn.select(GET_VALUES):
+            value = row[0]
+            if value:
+                yield self.decode(value)
+            else:
+                dict_val = {query_columns[i]: self.decode(item[i+1]) for i in range(len(query_columns))}
+                yield dict_val
 
     def iteritems(self):
-        GET_ITEMS = 'SELECT key, value FROM "%s" ORDER BY rowid' % self.tablename
-        for key, value in self.conn.select(GET_ITEMS):
-            yield key, self.decode(value)
+        query_columns = list(self.columns)
+        columns_str = ", ".join(["key", "value"] + query_columns)
+        GET_ITEMS = f"SELECT {columns_str} FROM \"{self.tablename}\" ORDER BY rowid"
+
+        for row in self.conn.select(GET_ITEMS):
+            key = row[0]
+            value = row[1]
+            if value:
+                yield key, self.decode(value)
+            else:
+                dict_val = {query_columns[i]: self.decode(item[i+1]) for i in range(len(query_columns))}
+                yield dict_val
 
     def keys(self):
         return self.iterkeys() if major_version > 2 else list(self.iterkeys())
@@ -245,23 +264,51 @@ class SqliteDict(DictClass):
     def items(self):
         return self.iteritems() if major_version > 2 else list(self.iteritems())
 
+    def add_new_columns(self, columns):
+        new_columns = [k for k in columns if k not in self.columns]
+        for c in new_columns:
+            ADD_COLUMN = f"ALTER TABLE {self.tablename} ADD COLUMN {c} BLOB"
+            self.conn.execute(ADD_COLUMN)
+            self.columns.add(c)
+
+
     def __contains__(self, key):
         HAS_ITEM = 'SELECT 1 FROM "%s" WHERE key = ?' % self.tablename
         return self.conn.select_one(HAS_ITEM, (key,)) is not None
 
     def __getitem__(self, key):
-        GET_ITEM = 'SELECT value FROM "%s" WHERE key = ?' % self.tablename
+        query_columns = list(self.columns)
+        columns_str = ", ".join(["value"] + query_columns)
+        GET_ITEM = f"SELECT {columns_str} FROM \"{self.tablename}\" WHERE key = ?"
+
         item = self.conn.select_one(GET_ITEM, (key,))
         if item is None:
             raise KeyError(key)
-        return self.decode(item[0])
+
+        if item[0]:
+            return self.decode(item[0])
+
+        dict_val = {query_columns[i]: self.decode(item[i+1]) for i in range(len(query_columns))}
+        return dict_val
 
     def __setitem__(self, key, value):
         if self.flag == 'r':
             raise RuntimeError('Refusing to write to read-only SqliteDict')
 
-        ADD_ITEM = 'REPLACE INTO "%s" (key, value) VALUES (?,?)' % self.tablename
-        self.conn.execute(ADD_ITEM, (key, self.encode(value)))
+        if type(value) is dict:
+            if not value:
+                return
+            self.add_new_columns(value.keys())
+            columns_names = ", ".join(value.keys())
+            values_placeholders = "?" + ",?" * len(value.keys())
+
+            ADD_ITEM = f"REPLACE INTO {self.tablename} (key, {columns_names}) VALUES ({values_placeholders})"
+            values = [key] + [self.encode(v) for v in value.values()]
+            self.conn.execute(ADD_ITEM, tuple(values))
+        else:
+            ADD_ITEM = 'REPLACE INTO "%s" (key, value) VALUES (?,?)' % self.tablename
+            self.conn.execute(ADD_ITEM, (key, self.encode(value)))
+
         if self.autocommit:
             self.commit()
 

@@ -278,7 +278,6 @@ class SqliteDictJsonSerializationTest(unittest.TestCase):
         }
         self.db['test'] = test_value
         assert self.db['test'] == test_value
-        assert self.get_json('test') == json.dumps(test_value)
 
 
 class TablenamesTest(unittest.TestCase):
