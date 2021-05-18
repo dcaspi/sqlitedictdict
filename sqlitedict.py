@@ -249,7 +249,7 @@ class SqliteDict(DictClass):
         for row in self.conn.select(GET_ITEMS):
             key = row[0]
             value = row[1]
-            if value:
+            if value is not None:
                 yield key, self.decode(value)
             else:
                 dict_val = {query_columns[i]: self.decode(item[i+1]) for i in range(len(query_columns))}
@@ -285,10 +285,10 @@ class SqliteDict(DictClass):
         if item is None:
             raise KeyError(key)
 
-        if item[0]:
+        if item[0] is not None:
             return self.decode(item[0])
 
-        dict_val = {query_columns[i]: self.decode(item[i+1]) for i in range(len(query_columns))}
+        dict_val = {query_columns[i]: self.decode(item[i+1]) for i in range(len(query_columns)) if item[i+1] is not None}
         return dict_val
 
     def __setitem__(self, key, value):
