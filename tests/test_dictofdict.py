@@ -37,3 +37,4 @@ class DictOfDictValueTest(TempSqliteDictTest):
         self.d["second_dict"] = second_dict
 
         self.assertEqual(self.d["first_dict"], first_dict)
+        self.assertEqual(self.d["second_dict"], second_dict)
