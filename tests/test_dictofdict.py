@@ -38,3 +38,15 @@ class DictOfDictValueTest(TempSqliteDictTest):
 
         self.assertEqual(self.d["first_dict"], first_dict)
         self.assertEqual(self.d["second_dict"], second_dict)
+
+    def test_reopen_dict(self):
+        db = norm_file('tests/db/sqlitedict-of-dict-db.sqlite')
+
+        test_dict = {"a": 1, "b": 2, "c": "d"}
+
+        with sqlitedict.SqliteDict(filename=db, autocommit=True) as dict_db:
+            dict_db["my_dict"] = test_dict
+            self.assertEqual(dict_db["my_dict"], test_dict)
+
+        with sqlitedict.SqliteDict(filename=db, autocommit=True) as dict_db_reopened:
+            self.assertEqual(dict_db_reopened["my_dict"], test_dict)

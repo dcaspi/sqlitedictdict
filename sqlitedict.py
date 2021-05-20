@@ -172,7 +172,6 @@ class SqliteDict(DictClass):
         self.encode = encode
         self.decode = decode
         self.timeout = timeout
-        self.columns = set()
 
         logger.info("opening Sqlite table %r in %r" % (tablename, filename))
         self.conn = self._new_conn()
@@ -186,6 +185,8 @@ class SqliteDict(DictClass):
             self.conn.commit()
         if flag == 'w':
             self.clear()
+
+        self.columns = self.get_dict_columns()
 
     def _new_conn(self):
         return SqliteMultithread(self.filename, autocommit=self.autocommit, journal_mode=self.journal_mode,
@@ -231,7 +232,6 @@ class SqliteDict(DictClass):
         query_columns = list(self.columns)
         columns_str = ", ".join(["value"] + query_columns)
         GET_VALUES = f"SELECT {columns_str} FROM \"{self.tablename}\" ORDER BY rowid"
-
 
         for row in self.conn.select(GET_VALUES):
             value = row[0]
@@ -364,6 +364,12 @@ class SqliteDict(DictClass):
             res = cursor.fetchall()
 
         return [name[0] for name in res]
+
+    def get_dict_columns(self):
+        GET_COLUMN_NAMES = 'PRAGMA table_info(%r)' % self.tablename
+        rows = self.conn.select(GET_COLUMN_NAMES)
+
+        return {row[1] for row in rows if row[1] != "key" and row[1] != "value"}
 
     def commit(self, blocking=True):
         """
