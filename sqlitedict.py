@@ -97,12 +97,18 @@ def open(*args, **kwargs):
 
 def encode(obj):
     """Serialize an object using pickle to a binary format accepted by SQLite."""
-    return sqlite3.Binary(dumps(obj, protocol=PICKLE_PROTOCOL))
+    if SqliteDict.column_type_for_value(obj) != "BLOB":
+        return obj
+    else:
+        return sqlite3.Binary(dumps(obj, protocol=PICKLE_PROTOCOL))
 
 
 def decode(obj):
     """Deserialize objects retrieved from SQLite."""
-    return loads(bytes(obj))
+    if type(obj) is bytes:
+        return loads(bytes(obj))
+    else:
+        return obj
 
 
 class SqliteDict(DictClass):
@@ -238,7 +244,7 @@ class SqliteDict(DictClass):
             if value:
                 yield self.decode(value)
             else:
-                dict_val = {query_columns[i]: self.decode(item[i+1]) for i in range(len(query_columns))}
+                dict_val = {query_columns[i]: self.decode(row[i+1]) for i in range(len(query_columns))}
                 yield dict_val
 
     def iteritems(self):
@@ -252,7 +258,7 @@ class SqliteDict(DictClass):
             if value is not None:
                 yield key, self.decode(value)
             else:
-                dict_val = {query_columns[i]: self.decode(item[i+1]) for i in range(len(query_columns))}
+                dict_val = {query_columns[i]: self.decode(row[i+1]) for i in range(len(query_columns))}
                 yield dict_val
 
     def keys(self):
@@ -264,12 +270,24 @@ class SqliteDict(DictClass):
     def items(self):
         return self.iteritems() if major_version > 2 else list(self.iteritems())
 
-    def add_new_columns(self, columns):
-        new_columns = [k for k in columns if k not in self.columns]
+    @staticmethod
+    def column_type_for_value(val):
+        if type(val) is int:
+            return "INTEGER"
+        elif type(val) is float:
+            return "REAL"
+        elif type(val) is str:
+            return "TEXT"
+        else:
+            return "BLOB"
+
+    def add_new_columns(self, items):
+        new_columns = [k for k in items if k[0] not in self.columns]
         for c in new_columns:
-            ADD_COLUMN = f"ALTER TABLE {self.tablename} ADD COLUMN {c} BLOB"
+            column_type = SqliteDict.column_type_for_value(c[1])
+            ADD_COLUMN = f"ALTER TABLE {self.tablename} ADD COLUMN {c[0]} {column_type}"
             self.conn.execute(ADD_COLUMN)
-            self.columns.add(c)
+            self.columns.add(c[0])
 
 
     def __contains__(self, key):
@@ -298,7 +316,7 @@ class SqliteDict(DictClass):
         if type(value) is dict:
             if not value:
                 return
-            self.add_new_columns(value.keys())
+            self.add_new_columns(value.items())
             columns_names = ", ".join(value.keys())
             values_placeholders = "?" + ",?" * len(value.keys())
 
