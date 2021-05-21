@@ -66,15 +66,6 @@ class SqliteMiscTest(unittest.TestCase):
             d['key'] = 'value'
             d.commit(blocking=False)
 
-    def test_complex_struct(self):
-        test_value = {
-            'version': 2.5,
-            'items': ['one', 'two'],
-        }
-        with SqliteDict(autocommit=True) as d:
-            d['test'] = test_value
-            assert d['test'] == test_value
-
 
 class NamedSqliteDictCreateOrReuseTest(TempSqliteDictTest):
     """Verify default flag='c', and flag='n' of SqliteDict()."""
@@ -279,6 +270,15 @@ class SqliteDictJsonSerializationTest(unittest.TestCase):
         self.db['test'] = None
         assert self.db['test'] is None
         assert self.get_json('test') == 'null'
+
+    def test_complex_struct(self):
+        test_value = {
+            'version': 2.5,
+            'items': ['one', 'two'],
+        }
+        with SqliteDict(autocommit=True) as d:
+            d['test'] = test_value
+            assert d['test'] == test_value
 
 
 class TablenamesTest(unittest.TestCase):
