@@ -115,7 +115,7 @@ class SqliteDict(DictClass):
     VALID_FLAGS = ['c', 'r', 'w', 'n']
 
     def __init__(self, filename=None, tablename='unnamed', flag='c',
-                 autocommit=False, journal_mode="DELETE", encode=encode, decode=decode, timeout=5):
+                 autocommit=False, journal_mode="DELETE", encode=encode, decode=decode, timeout=5, conn=None):
         """
         Initialize a thread-safe sqlite-backed dictionary. The dictionary will
         be a table `tablename` in database file `filename`. A single file (=database)
@@ -178,9 +178,10 @@ class SqliteDict(DictClass):
         self.encode = encode
         self.decode = decode
         self.timeout = timeout
+        self.own_conn = conn is None
 
         logger.info("opening Sqlite table %r in %r" % (tablename, filename))
-        self.conn = self._new_conn()
+        self.conn = conn if conn is not None else self._new_conn()
         if self.flag == 'r':
             if self.tablename not in SqliteDict.get_tablenames(self.filename):
                 msg = 'Refusing to create a new table "%s" in read-only DB mode' % tablename
@@ -400,17 +401,24 @@ class SqliteDict(DictClass):
             self.conn.commit(blocking)
     sync = commit
 
+    @staticmethod
+    def close_conn(conn, force=False):
+        if conn.autocommit and not force:
+            # typically calls to commit are non-blocking when autocommit is
+            # used.  However, we need to block on close() to ensure any
+            # awaiting exceptions are handled and that all data is
+            # persisted to disk before returning.
+            conn.commit(blocking=True)
+        conn.close(force=force)
+
+
     def close(self, do_log=True, force=False):
         if do_log:
             logger.debug("closing %s" % self)
+        if not self.own_conn:
+            return
         if hasattr(self, 'conn') and self.conn is not None:
-            if self.conn.autocommit and not force:
-                # typically calls to commit are non-blocking when autocommit is
-                # used.  However, we need to block on close() to ensure any
-                # awaiting exceptions are handled and that all data is
-                # persisted to disk before returning.
-                self.conn.commit(blocking=True)
-            self.conn.close(force=force)
+            SqliteDict.close_conn(self.conn, force)
             self.conn = None
         if self.in_temp:
             try:
@@ -460,7 +468,7 @@ class SqliteMultithread(Thread):
     in a separate thread (in the same order they arrived).
 
     """
-    def __init__(self, filename, autocommit, journal_mode, timeout):
+    def __init__(self, filename, autocommit=False, journal_mode="DELETE", timeout=5):
         super(SqliteMultithread, self).__init__()
         self.filename = filename
         self.autocommit = autocommit
