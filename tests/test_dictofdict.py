@@ -32,6 +32,14 @@ class DictOfDictValueTest(TempSqliteDictTest):
             set(self.d["mydict"].items()), {("a", 1), ("b", 2), ("c", "d")}
         )
 
+    def test_complex_iter(self):
+        self.d["mydict"] = {"a": 1, "b": 2, "c": "d"}
+        self.d["mydict_2"] = {"a": 3, "b": 4, "c": "e"}
+        self.assertEqual(set(self.d.keys()), {"mydict", "mydict_2"})
+        self.assertEqual(
+            tuple(self.d.items()), (("mydict", {"a": 1, "b": 2, "c": "d"}), ("mydict_2", {"a": 3, "b": 4, "c": "e"}))
+        )
+
     def test_partial(self):
         first_dict = {"a": 1, "b": 2, "c": "d"}
         second_dict = {"a": 2, "c": "e", "f": "g"}

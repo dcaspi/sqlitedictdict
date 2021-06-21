@@ -259,8 +259,8 @@ class SqliteDict(DictClass):
             if value is not None:
                 yield key, self.decode(value)
             else:
-                dict_val = {query_columns[i]: self.decode(row[i+1]) for i in range(len(query_columns))}
-                yield dict_val
+                dict_val = {query_columns[i]: self.decode(row[i+2]) for i in range(len(query_columns))}
+                yield key, dict_val
 
     def keys(self):
         return self.iterkeys() if major_version > 2 else list(self.iterkeys())
